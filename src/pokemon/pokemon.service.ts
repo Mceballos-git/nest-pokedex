@@ -1,20 +1,27 @@
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
-import { CreatePokemonDto } from './dto/create-pokemon.dto';
-import { UpdatePokemonDto } from './dto/update-pokemon.dto';
-import { Model, isValidObjectId } from 'mongoose';
-import { Pokemon } from './entities/pokemon.entity';
+import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 
+import { Model, isValidObjectId } from 'mongoose';
+import { Pokemon } from './entities/pokemon.entity';
+
+import { CreatePokemonDto } from './dto/create-pokemon.dto';
+import { UpdatePokemonDto } from './dto/update-pokemon.dto';
+import { paginationDto } from 'src/common/dto/pagination.dto';
 @Injectable()
 export class PokemonService {
 
+  private defaultLimit: number;
+
   constructor( 
     @InjectModel( Pokemon.name )
-    private readonly pokemonModel: Model<Pokemon> 
-  ) {}
+    private readonly pokemonModel: Model<Pokemon>,
+    private readonly configService: ConfigService
+  ) {
+    this.defaultLimit = this.configService.get<number>('defaultLimit');
+  }
 
    async create(createPokemonDto: CreatePokemonDto) {
-
     createPokemonDto.name = createPokemonDto.name.toLocaleLowerCase();
 
     try {
@@ -26,14 +33,21 @@ export class PokemonService {
 
   }
 
-  findAll() {
-    return `This action returns all pokemon`;
+  findAll( queryParameters: paginationDto ) {
+    const { limit = this.defaultLimit, offset = 0 } = queryParameters;
+
+    return this.pokemonModel.find()
+    .skip( offset )
+    .limit( limit )
+    .sort({
+      no: 1
+    })
+    .select('-__v');
   }
 
 
 
   async findOne(term: string) {
-
     let pokemon: Pokemon;
 
     // Check if term is of type number
@@ -54,12 +68,11 @@ export class PokemonService {
     if ( !pokemon ) throw new NotFoundException(`Pokemon with id, name or no "${ term }" not found`)
 
     return pokemon
-  }
+  };
 
 
 
   async update( term: string, updatePokemonDto: UpdatePokemonDto ) {
-
     const pokemon = await this.findOne( term );
 
     if ( updatePokemonDto.name ) 
@@ -72,20 +85,19 @@ export class PokemonService {
     } catch (error) {
       this.handleExceptions( error );
     }
-  }
+  };
 
 
 
   async remove( id: string ) {
-
     // const result = await this.pokemonModel.findByIdAndDelete( id );
 
     const { deletedCount } = await this.pokemonModel.deleteOne({ _id: id });
 
     if ( deletedCount === 0 ) throw new BadRequestException(`Pokemon with id "${ id }" not found`)
 
-    return;
-  }
+    return
+  };
 
   private handleExceptions( error: any ) {
    if ( error.code === 11000 ) {
@@ -94,5 +106,5 @@ export class PokemonService {
       console.log(error);
       throw new InternalServerErrorException(`Can't create Pokemon - Check server logs`)
     
-  }
+  };
 }
